@@ -1,0 +1,73 @@
+{
+  "id": "mubis-x-hd",
+  "name": "Mubis X HD",
+  "version": "0.1.0",
+  "apiVersion": 9,
+  "entry": "plugin.js",
+  "description": "Contenido para adultos en HD: películas y canales en vivo, protegidos con el código 18+ de Kino.",
+  "author": "kinotvapp",
+  "hosts": [
+    "vseemax.com"
+  ],
+  "capabilities": [
+    "home",
+    "browse",
+    "search",
+    "episodes",
+    "resolve",
+    "download",
+    "channels"
+  ],
+  "categories": [
+    "adult"
+  ],
+  "color": "#E53935",
+  "theme": {
+    "accent": "#E53935",
+    "onAccent": "#FFFFFF",
+    "background": "#0A0A0A",
+    "surface": "#1A1A1A",
+    "highlight": "#FF8A80"
+  },
+  "debug": true,
+  "secrets": {
+    "ck": {
+      "seal": "kino-sealed:v1:lRHtNh-dDiFPAgtx2W7oAejUPGXC0LJJxdn4cAcNFmESLEw3bYzYUi3Mu6kITSM1BpAS5AumszyyXeVc7fLEDXCDBUj389eQe9A3Enqnjxv6rHhLPdCYQZrJUUChnn7gGAjKOwMlKsJJ1ashzmb_gSFSFHKW7Tb10Dp1Eg",
+      "use": "cipher-key",
+      "encoding": "hex"
+    }
+  },
+  "streamHosts": "any",
+  "settings": [
+    {
+      "key": "accountSection",
+      "type": "section",
+      "label": "Cuenta",
+      "labelEn": "Account"
+    },
+    {
+      "key": "account",
+      "type": "status",
+      "label": "Estado de la cuenta",
+      "labelEn": "Account status"
+    },
+    {
+      "key": "probe",
+      "type": "action",
+      "label": "Probar conexión",
+      "labelEn": "Test connection"
+    },
+    {
+      "key": "clearCache",
+      "type": "action",
+      "label": "Vaciar caché",
+      "labelEn": "Clear cache",
+      "confirm": "¿Vaciar la caché de categorías?"
+    }
+  ],
+  "section": {
+    "label": "Mubis X HD"
+  },
+  "liveStreamHosts": "any",
+  "icon": "icon.png"
+}

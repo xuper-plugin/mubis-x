@@ -35,11 +35,13 @@ const TEXTS = {
     movies: "Películas", series: "Series", heroMovies: "Estrenos y clásicos en HD.", heroSeries: "Series completas, temporada a temporada.",
     account: "Cuenta", accountOk: "Activa", accountBad: "No activa", noExpiry: "sin vencimiento", expires: "vence", connections: "conexiones",
     probeOk: "Conexión correcta.", probeFail: "No se pudo conectar con el servidor.", cacheCleared: "Caché vaciada.",
+    gNew: "Recién agregadas", gTop: "Mejor valoradas", gOlder: "Antes de", gAll: "Todos los canales", gAmateur: "Amateur", gLatinas: "Latinas", gMaduras: "Maduras", gLesbico: "Lésbico", gInterracial: "Interracial", gRedes: "Redes y estudios", gFetiche: "Fetiche",
   },
   en: {
     movies: "Movies", series: "Series", heroMovies: "New releases and classics in HD.", heroSeries: "Full series, season by season.",
     account: "Account", accountOk: "Active", accountBad: "Not active", noExpiry: "no expiry", expires: "expires", connections: "connections",
     probeOk: "Connection OK.", probeFail: "Could not reach the server.", cacheCleared: "Cache cleared.",
+    gNew: "Recently added", gTop: "Top rated", gOlder: "Before", gAll: "All channels", gAmateur: "Amateur", gLatinas: "Latinas", gMaduras: "Mature", gLesbico: "Lesbian", gInterracial: "Interracial", gRedes: "Networks and studios", gFetiche: "Fetish",
   },
 };
 function t(key) {
@@ -142,37 +144,61 @@ function seriesToItem(s) {
 
 // ---- 5. home / section -----------------------------------------------------------------------------------------
 
-async function rowFor(isVod, cat, genre) {
-  try {
-    const list = arr(await (isVod ? vodStreams(cat.category_id) : seriesList(cat.category_id)));
-    const items = list.slice(0, HOME_ROW_ITEMS).map(isVod ? vodToItem : seriesToItem);
-    if (!items.length) return null;
-    return { id: (isVod ? "vod-" : "ser-") + cat.category_id, title: text(cat.category_name, 60), items, ref: "cat:" + (isVod ? "vod:" : "series:") + cat.category_id, genre: "otros" };
-  } catch (e) { kino.log("row " + cat.category_id + ": " + (e && e.message)); return null; }
+// The server keeps all the 18+ movies in one huge category, so Kino's lists are virtual groups built from it: newest, top rated,
+// by year and by letter. Every ref "v:<id>" is rebuilt from the same list.
+const LETTERS = ["A-C", "D-H", "I-L", "M-P", "Q-S", "T-Z"];
+const FIRST_LETTER = (name) => (String(name || "").replace(/[^A-Za-z0-9]/g, "")[0] || "0").toUpperCase();
+
+function vodGroups() {
+  const y = new Date().getFullYear();
+  const g = [{ id: "new", title: t("gNew") }, { id: "top", title: t("gTop") }];
+  for (let i = 0; i < 5; i++) g.push({ id: "y" + (y - i), title: String(y - i) });
+  g.push({ id: "yold", title: t("gOlder") + " " + (y - 4) });
+  for (const r of LETTERS) g.push({ id: "az" + r, title: "A-Z · " + r });
+  return g;
 }
 
-async function rowsFor(kind) {
-  const isVod = kind === "vod";
-  const cats = adultCats(await (isVod ? vodCategories() : seriesCategories()).catch((e) => { kino.log(kind + " cats: " + (e && e.message)); return []; }))
-    .slice(0, isVod ? HOME_VOD_CATS : HOME_SER_CATS);
-  return (await Promise.all(cats.map((c) => rowFor(isVod, c)))).filter(Boolean);
+async function adultVod() {
+  const cats = adultCats(await vodCategories().catch(() => []));
+  const lists = await Promise.all(cats.map((c) => vodStreams(c.category_id).catch((e) => { kino.log("vod " + c.category_id + ": " + (e && e.message)); return []; })));
+  return [].concat(...lists.map(arr));
+}
+
+const byAdded = (a, b) => (parseInt(b.added, 10) || 0) - (parseInt(a.added, 10) || 0);
+
+function groupItems(all, id) {
+  const y = new Date().getFullYear();
+  let list;
+  if (id === "new") list = all.slice().sort(byAdded);
+  else if (id === "top") list = all.filter((v) => parseFloat(v.rating) > 0).sort((a, b) => parseFloat(b.rating) - parseFloat(a.rating) || byAdded(a, b));
+  else if (id === "yold") list = all.filter((v) => { const yr = parseInt(yearOf(v.name), 10); return !yr || yr < y - 4; }).sort(byAdded);
+  else if (/^y\d{4}$/.test(id)) list = all.filter((v) => yearOf(v.name) === id.slice(1)).sort(byAdded);
+  else if (/^az[A-Z]-[A-Z]$/.test(id)) { const lo = id[2], hi = id[4]; list = all.filter((v) => { let c = FIRST_LETTER(v.name); if (c < "A") c = "A"; return c >= lo && c <= hi; }).sort((a, b) => String(a.name).localeCompare(String(b.name))); }
+  else list = [];
+  return list;
+}
+
+async function homeRows() {
+  const all = await adultVod();
+  const y = new Date().getFullYear();
+  return ["new", "top", "y" + y, "y" + (y - 1), "y" + (y - 2)].map((id) => {
+    const g = vodGroups().find((x) => x.id === id);
+    const items = groupItems(all, id).slice(0, HOME_ROW_ITEMS).map(vodToItem);
+    return items.length ? { id: "vg-" + id, title: g.title, items, ref: "v:" + id, genre: "peliculas" } : null;
+  }).filter(Boolean);
 }
 
 export async function home() {
-  const [v, s] = await Promise.all([rowsFor("vod"), rowsFor("series")]);
-  return v.concat(s);
+  return homeRows();
 }
 
 export async function section({ tab }) {
-  const tabs = [{ id: "movies", label: t("movies") }, { id: "series", label: t("series") }];
-  const chosen = tab === "series" ? "series" : "movies";
-  const kind = chosen === "series" ? "series" : "vod";
-  const rows = await rowsFor(kind);
-  const answer = { tabs, tab: chosen, rows };
+  const rows = await homeRows();
+  const answer = { tabs: [{ id: "movies", label: t("movies") }], tab: "movies", rows };
   const pool = rows.length ? rows[0].items : [];
   if (pool.length) {
     const pick = pool[Math.floor(Date.now() / 86400000) % pool.length];
-    answer.hero = { title: pick.title, text: t(chosen === "series" ? "heroSeries" : "heroMovies") };
+    answer.hero = { title: pick.title, text: t("heroMovies") };
     const img = pick.backdrop || pick.poster;
     if (img) answer.hero.image = img;
   }
@@ -183,6 +209,12 @@ export async function section({ tab }) {
 
 export async function browse(ref, cursor) {
   const offset = cursor ? parseInt(cursor, 10) : 0;
+  const g = /^v:(.+)$/.exec(String(ref || ""));
+  if (g) {
+    const list = groupItems(await adultVod(), g[1]);
+    const page = list.slice(offset, offset + PAGE_SIZE).map(vodToItem);
+    return { items: page, next: offset + PAGE_SIZE < list.length ? String(offset + PAGE_SIZE) : undefined };
+  }
   const m = /^cat:(vod|series):(.+)$/.exec(String(ref || ""));
   if (!m) return { items: [] };
   const isVod = m[1] === "vod";
@@ -234,9 +266,7 @@ export async function search(query) {
 // ---- 8. categories ---------------------------------------------------------------------------------------------
 
 export async function categories() {
-  const [v, s] = await Promise.all([vodCategories().catch(() => []), seriesCategories().catch(() => [])]);
-  const tile = (kind, c) => ({ id: kind + "-" + c.category_id, title: text(c.category_name, 40), ref: "cat:" + kind + ":" + c.category_id, adult: true });
-  return adultCats(v).slice(0, 12).map((c) => tile("vod", c)).concat(adultCats(s).slice(0, 12).map((c) => tile("series", c)));
+  return vodGroups().map((g) => ({ id: "vg-" + g.id, title: text(g.title, 40), ref: "v:" + g.id, adult: true }));
 }
 
 // ---- 9. episodes / details -------------------------------------------------------------------------------------
@@ -376,13 +406,38 @@ function liveToChannel(s) {
   });
 }
 
+const LIVE_GROUPS = [
+  { id: "all", key: "gAll" },
+  { id: "amateur", key: "gAmateur", re: /amateur|homemade|casting|voyeur|reality/i },
+  { id: "latinas", key: "gLatinas", re: /latin|brazil|mexic|colomb|argent|spanish|8th street/i },
+  { id: "maduras", key: "gMaduras", re: /milf|mature|mom|granny|cougar|40 something|allover30|older/i },
+  { id: "lesbico", key: "gLesbico", re: /lesb|girl|sapphic/i },
+  { id: "interracial", key: "gInterracial", re: /interracial|bbc|black|ebony/i },
+  { id: "redes", key: "gRedes", re: /network|studio|prime|channel|empire|brazzers|bang|mofos|naughty|digital|tv\b/i },
+  { id: "fetiche", key: "gFetiche", re: /fetish|bdsm|bondage|foot|latex|kink|domina|femdom/i },
+  { id: "az-A-D", title: "A-Z · A-D", lo: "A", hi: "D" },
+  { id: "az-E-L", title: "A-Z · E-L", lo: "E", hi: "L" },
+  { id: "az-M-R", title: "A-Z · M-R", lo: "M", hi: "R" },
+  { id: "az-S-Z", title: "A-Z · S-Z", lo: "S", hi: "Z" },
+];
+
+async function adultLive() {
+  const cats = adultCats(await liveCats().catch(() => []));
+  const lists = await Promise.all(cats.map((c) => getJson(apiUrl({ action: "get_live_streams", category_id: c.category_id }), 25000).catch(() => [])));
+  return [].concat(...lists.map(arr));
+}
+
 export async function liveCategories() {
-  return adultCats(await liveCats()).map((c) => ({ id: String(c.category_id), title: text(c.category_name, 60), genre: "otros", adult: true }));
+  return LIVE_GROUPS.map((g) => ({ id: g.id, title: text(g.title || t(g.key), 60), genre: "entretenimiento", adult: true }));
 }
 
 export async function liveChannels({ categoryId, cursor }) {
   const offset = cursor ? parseInt(cursor, 10) : 0;
-  const list = arr(await getJson(apiUrl({ action: "get_live_streams", category_id: categoryId }), 25000));
+  const g = LIVE_GROUPS.find((x) => x.id === categoryId);
+  let list = await adultLive();
+  if (g && g.re) list = list.filter((s) => g.re.test(String(s.name || "")));
+  else if (g && g.lo) list = list.filter((s) => { let c = FIRST_LETTER(s.name); if (c < "A") c = "A"; return c >= g.lo && c <= g.hi; });
+  list.sort((a, b) => String(a.name).localeCompare(String(b.name)));
   const items = list.slice(offset, offset + LIVE_PAGE).map(liveToChannel);
   return { items, next: offset + LIVE_PAGE < list.length ? String(offset + LIVE_PAGE) : null };
 }

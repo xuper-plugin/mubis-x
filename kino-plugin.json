@@ -1,7 +1,7 @@
 {
   "id": "mubis-x-hd",
   "name": "Mubis X HD",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "apiVersion": 9,
   "entry": "plugin.js",
   "description": "Contenido para adultos en HD: películas y canales en vivo, protegidos con el código 18+ de Kino.",
